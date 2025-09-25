@@ -3,21 +3,36 @@
 :- discontiguous in_deck/2.
 :- discontiguous in_board/2.
 
-
+% -----------------------
+% ИНИЦИАЛЬНОЕ СОСТОЯНИЕ
+% Ход: CurrentPlayer = 1, Turn = 1
+% Оба игрока: Mana = 1, MaxMana = 1
+% Доски пусты
+% -----------------------
 initial_state(game_state(
-    player(30, 3, 3,
-           [ card(wisp,0,1,1), card(murloc_raider,1,2,1), card(chillwind_yeti,4,4,5) ],
-           [ card(stonetusk_boar,1,1,1), card(bloodfen_raptor,2,3,2), card(argent_squire,1,1,1) ],
-           [ minion(ally_1,2,2,false) ]),   % ally_1 не может атаковать сразу
-    player(30, 2, 2,
-           [ card(river_crocolisk,2,2,3), card(boulderfist_ogre,6,6,7) ],
-           [ card(scarlet_crusader,3,3,1) ],
-           [ minion(enemy_1,1,1,false) ]), % enemy_1 не может атаковать сразу
-    1, 1
+    player(30, 1, 1,                   % Player1: Health=30, Mana=1, MaxMana=1
+           [ card(stonetusk_boar,1,1,1), card(bloodfen_raptor,2,3,2),
+             card(chillwind_yeti,4,4,5), card(loot_hoarder,2,2,1),
+             card(argent_squire,1,1,1), card(war_golem,7,7,7),
+             card(silverhand_recruit,1,1,1), card(acolyte_of_pain,3,1,3),
+             card(fire_elemental,6,6,5), card(leeroy_jenkins,5,6,2)
+           ], % Deck (Player1)
+           [ card(wisp,0,1,1), card(murloc_raider,1,2,1) ], % Hand (Player1)
+           []),   % Board пустой (Player1)
+    player(30, 1, 1,                   % Player2: Health=30, Mana=1, MaxMana=1
+           [ card(scarlet_crusader,3,3,1), card(river_crocolisk,2,2,3),
+             card(boulderfist_ogre,6,6,7), card(chillwind_yeti,4,4,5),
+             card(loot_hoarder,2,2,1), card(acolyte_of_pain,3,1,3),
+             card(war_golem,7,7,7)
+           ], % Deck (Player2)
+           [ card(river_crocolisk,2,2,3), card(boulderfist_ogre,6,6,7) ], % Hand (Player2)
+           []),  % Board пустой (Player2)
+    1, 1  % CurrentPlayer = 1, Turn = 1
 )).
 
 % -----------------------
 % КАРТЫ (card/4: Name, Cost, Attack, Health)
+% Все характеристики хранятся в card/4; дополнительные предикаты выведены из него.
 % -----------------------
 card(wisp, 0, 1, 1).
 card(stonetusk_boar, 1, 1, 1).
@@ -32,9 +47,16 @@ card(loot_hoarder, 2, 2, 1).
 card(war_golem, 7, 7, 7).
 card(acolyte_of_pain, 3, 1, 3).
 card(leeroy_jenkins, 5, 6, 2).
+card(silverhand_recruit, 1, 1, 1).
+card(fire_elemental, 6, 6, 5).
+card(novice_engineer, 2, 1, 1).
+card(murloc_scout, 1, 1, 1).
+card(blood_mage_thalnos, 2, 1, 1).
+card(senjin_shieldmasta, 4, 3, 5).
 
 % -----------------------
-% ОДНОАРГУМЕНТНЫЕ ФАКТЫ (не менее 20)
+% ОДНОАРГУМЕНТНЫЕ ФАКТЫ (>=20)
+% Описывают имена, роли, способности, трибы, и т.д.
 % -----------------------
 minion_name(wisp).
 minion_name(stonetusk_boar).
@@ -49,6 +71,12 @@ minion_name(loot_hoarder).
 minion_name(war_golem).
 minion_name(acolyte_of_pain).
 minion_name(leeroy_jenkins).
+minion_name(silverhand_recruit).
+minion_name(fire_elemental).
+minion_name(novice_engineer).
+minion_name(murloc_scout).
+minion_name(blood_mage_thalnos).
+minion_name(senjin_shieldmasta).
 
 player_name(player1).
 player_name(player2).
@@ -58,10 +86,12 @@ ability(taunt).
 ability(rush).
 ability(divine_shield).
 ability(battlecry).
+ability(deathrattle).
 
 tribe(beast).
 tribe(murloc).
 tribe(mech).
+tribe(elemental).
 
 rarity(common).
 rarity(rare).
@@ -72,111 +102,142 @@ zone(board).
 
 role(hero).
 
-% -----------------------
-% ДВУХАРГУМЕНТНЫЕ ФАКТЫ
-% -----------------------
-card_cost(chillwind_yeti, 4).
-card_attack(chillwind_yeti, 4).
-card_health(chillwind_yeti, 5).
+expansion(core).
+expansion(classic).
 
-card_cost(boulderfist_ogre, 6).
-card_cost(argent_squire, 1).
-card_cost(scarlet_crusader, 3).
+% -----------------------
+% ДВУХАРГУМЕНТНЫЕ ФАКТЫ (10-15+)
+% способности, трибы, положение карт в зонах (синхронизировано с initial_state)
+% -----------------------
 
 % способности у карт
 ability_of(stonetusk_boar, charge).
 ability_of(argent_squire, divine_shield).
 ability_of(murloc_raider, rush).
 ability_of(scarlet_crusader, taunt).
-ability_of(leeroy_jenkins, charge). % пример: leeroy тоже считает charge-like
+ability_of(leeroy_jenkins, charge).
+ability_of(loot_hoarder, deathrattle).
 
 % трибы
 tribe_of(murloc_raider, murloc).
 tribe_of(river_crocolisk, beast).
+tribe_of(fire_elemental, elemental).
 
-% положение карт (дополнение к initial_state; использовать для правил/запросов)
-in_hand(player1, stonetusk_boar).
-in_hand(player1, bloodfen_raptor).
-in_hand(player2, scarlet_crusader).
+% положение карт (дополнительные факты, полезны для запросов)
+% Синхронизированы с initial_state: in_hand соответствует Hand, in_deck — Deck, in_board — пусто
+in_hand(player1, wisp).
+in_hand(player1, murloc_raider).
+in_hand(player2, river_crocolisk).
+in_hand(player2, boulderfist_ogre).
+
+in_deck(player1, stonetusk_boar).
+in_deck(player1, bloodfen_raptor).
 in_deck(player1, chillwind_yeti).
-in_board(player2, enemy_1).
+in_deck(player1, loot_hoarder).
+in_deck(player1, argent_squire).
+in_deck(player1, war_golem).
+in_deck(player1, silverhand_recruit).
+in_deck(player1, acolyte_of_pain).
+in_deck(player1, fire_elemental).
+in_deck(player1, leeroy_jenkins).
+
+in_deck(player2, scarlet_crusader).
+in_deck(player2, river_crocolisk).
+in_deck(player2, boulderfist_ogre).
+in_deck(player2, chillwind_yeti).
+in_deck(player2, loot_hoarder).
+in_deck(player2, acolyte_of_pain).
+in_deck(player2, war_golem).
+
+% доски пусты (нет in_board фактов)
+% in_board(player1, ...).  % нет
+% in_board(player2, ...).  % нет
 
 % -----------------------
 % ВСПОМОГАТЕЛЬНЫЕ ПРЕДИКАТЫ (утилиты)
 % -----------------------
+% remove_from_hand(HandList, CardTerm, NewHandList)
 remove_from_hand(Hand, Card, NewHand) :-
     select(Card, Hand, NewHand).
 
+% replace(Index, List, NewItem, NewList)
 replace(Index, List, NewItem, NewList) :-
     length(Prefix, Index1),
     Index is Index1 + 1,
     append(Prefix, [_|Suffix], List),
     append(Prefix, [NewItem|Suffix], NewList).
 
-% is_dead для minion(Name,Attack,Health,CanAttack)
-is_dead(minion(_, _, Health, _)) :- Health =< 0.
+% Новая форма minion: minion(Name,Attack,Health,CanAttack,RushOnly)
+% is_dead для minion(Name,Attack,Health,CanAttack,RushOnly)
+is_dead(minion(_, _, Health, _, _)) :- Health =< 0.
 remove_dead_minions(Board, FinalBoard) :-
     exclude(is_dead, Board, FinalBoard).
 
+% draw_card(Deck, Hand, NewDeck, NewHand)
 draw_card([Card|Deck], Hand, Deck, [Card|Hand]).
 draw_card([], Hand, [], Hand).
 
-% update_minion_health для 4-аргументной структуры
+% update_minion_health(Board, Index, NewHealth, NewBoard)
 update_minion_health(Board, Index, NewHealth, NewBoard) :-
-    nth1(Index, Board, minion(Name, Attack, _OldH, CanAttack)),
-    replace(Index, Board, minion(Name, Attack, NewHealth, CanAttack), NewBoard).
+    nth1(Index, Board, minion(Name, Attack, _OldH, CanAttack, RushOnly)),
+    replace(Index, Board, minion(Name, Attack, NewHealth, CanAttack, RushOnly), NewBoard).
 
-% set all minions on board to CanAttack = true (used at start of player's turn)
+% set_all_minions_ready (CanAttack = true, RushOnly -> false (снимаем ограничение рывка на новый ход))
 set_minions_ready([], []).
-set_minions_ready([minion(Name, Attack, Health, _)|T], [minion(Name, Attack, Health, true)|T2]) :-
+set_minions_ready([minion(Name, Attack, Health, _OldCan, _OldRush)|T],
+                  [minion(Name, Attack, Health, true, false)|T2]) :-
     set_minions_ready(T, T2).
 
 % -----------------------
-% ПРЕДИКАТЫ ИГРОВОГО ПРОЦЕССА (c charge/rush)
+% ВЫВОД ХАРАКТЕРИСТИК ИЗ card/4
+% вместо дублирования facts используем правила, это убирает предупреждения о discontiguous:
 % -----------------------
-% play_minion(GameState, MinionName, NewGameState)
-% Если карта имеет charge -> CanAttack = true.
-% Если карта имеет rush -> CanAttack = true, но в атаке будет запрещён таргет 0 (герой).
-% Иначе CanAttack = false (summon sickness).
+card_cost(Name, Cost) :- card(Name, Cost, _, _).
+card_attack(Name, Attack) :- card(Name, _, Attack, _).
+card_health(Name, Health) :- card(Name, _, _, Health).
 
+% -----------------------
+% ПРЕДИКАТЫ ИГРОВОГО ПРОЦЕССА (play/attack/end_turn)
+% Примечание: упрощённая симуляция для демонстрации логики.
+% -----------------------
+
+% play_minion(GameState, MinionName, NewGameState)
+% Если карта имеет charge -> CanAttack = true, RushOnly = false.
+% Если карта имеет rush -> CanAttack = true, RushOnly = true (в этом ходу нельзя бить героя).
+% Иначе CanAttack = false, RushOnly = false (summon sickness).
 play_minion(GameState, MinionName, NewGameState) :-
     GameState = game_state(P1, P2, CurrentPlayer, Turn),
-    CurrentPlayer = 1,
+    CurrentPlayer = 1,  % в этой версии действуем для CurrentPlayer = 1
     P1 = player(H1, M1, MaxM1, Deck1, Hand1, Board1),
     member(card(MinionName, Cost, Attack, Health), Hand1),
     Cost =< M1,
     NewMana is M1 - Cost,
     remove_from_hand(Hand1, card(MinionName, Cost, Attack, Health), NewHand1),
-    % determine if the minion can attack immediately
-    ( ability_of(MinionName, charge) -> CanAttack = true
-    ; ability_of(MinionName, rush)   -> CanAttack = true
-    ; CanAttack = false
+    ( ability_of(MinionName, charge) -> (CanAttack = true, RushOnly = false)
+    ; ability_of(MinionName, rush)   -> (CanAttack = true, RushOnly = true)
+    ; (CanAttack = false, RushOnly = false)
     ),
-    NewBoard1 = [minion(MinionName, Attack, Health, CanAttack)|Board1],
+    NewBoard1 = [minion(MinionName, Attack, Health, CanAttack, RushOnly)|Board1],
     NewP1 = player(H1, NewMana, MaxM1, Deck1, NewHand1, NewBoard1),
     NewGameState = game_state(NewP1, P2, CurrentPlayer, Turn).
 
 % attack(GameState, AttackerIndex, TargetIndex, NewGameState)
-% Проверки:
-% - атакующий должен иметь CanAttack = true
-% - если атакующий имеет rush, то TargetIndex = 0 (герой) запрещён
-% После атаки у атакующего CanAttack -> false
+% TargetIndex = 0 => атака в героя противника
 attack(GameState, AttackerIndex, TargetIndex, NewGameState) :-
     GameState = game_state(P1, P2, CurrentPlayer, Turn),
     CurrentPlayer = 1,
     P1 = player(H1, M1, MaxM1, Deck1, Hand1, Board1),
     P2 = player(H2, M2, MaxM2, Deck2, Hand2, Board2),
-    nth1(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, AttackerCanAttack)),
+    nth1(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, AttackerCanAttack, AttackerRushOnly)),
     % проверка, что может атаковать
-    ( AttackerCanAttack = true ->
-        true
+    ( AttackerCanAttack = true -> true
     ;
         % нельзя атаковать — завершаем как failure
         fail
     ),
-    % если у атакующего есть rush, запрещаем атаку в героя
-    ( ability_of(AttackerName, rush), TargetIndex = 0 ->
-        % rush не может атаковать героя
+    % если у атакующего есть рывок (RushOnly=true), запрещаем атаку в героя
+    ( AttackerRushOnly = true, TargetIndex = 0 ->
+        % rush не может атаковать героя в этот ход
         fail
     ;
         true
@@ -184,19 +245,19 @@ attack(GameState, AttackerIndex, TargetIndex, NewGameState) :-
     ( TargetIndex = 0 ->
         % Атака героя
         NewH2 is H2 - AttackerAttack,
-        % поставить флаг CanAttack = false для атакующего
-        replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, false), TempBoard1),
+        % поставить флаг CanAttack = false и снять RushOnly для атакующего
+        replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, false, false), TempBoard1),
         NewP2 = player(NewH2, M2, MaxM2, Deck2, Hand2, Board2),
         NewP1 = player(H1, M1, MaxM1, Deck1, Hand1, TempBoard1),
         NewGameState = game_state(NewP1, NewP2, CurrentPlayer, Turn)
     ;
         % Атака вражеского существа
-        nth1(TargetIndex, Board2, minion(TargetName, TargetAttack, TargetHealth, TargetCanAttack)),
+        nth1(TargetIndex, Board2, minion(TargetName, TargetAttack, TargetHealth, TargetCanAttack, TargetRushOnly)),
         NewAttackerHealth is AttackerHealth - TargetAttack,
         NewTargetHealth is TargetHealth - AttackerAttack,
-        % обновляем доски (и делаем атакующему CanAttack=false)
-        replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, NewAttackerHealth, false), TempBoard1),
-        replace(TargetIndex, Board2, minion(TargetName, TargetAttack, NewTargetHealth, TargetCanAttack), TempBoard2),
+        % обновляем доски (и делаем атакующему CanAttack=false, RushOnly=false)
+        replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, NewAttackerHealth, false, false), TempBoard1),
+        replace(TargetIndex, Board2, minion(TargetName, TargetAttack, NewTargetHealth, TargetCanAttack, TargetRushOnly), TempBoard2),
         remove_dead_minions(TempBoard1, FinalBoard1),
         remove_dead_minions(TempBoard2, FinalBoard2),
         NewP1 = player(H1, M1, MaxM1, Deck1, Hand1, FinalBoard1),
@@ -205,8 +266,7 @@ attack(GameState, AttackerIndex, TargetIndex, NewGameState) :-
     ).
 
 % end_turn / prepare_player_turn
-% На начале хода у игрока все его миньоны готовы (CanAttack = true),
-% т.е. снимается сумон-сикнесс у тех, кто был на доске в начале хода.
+% При end_turn передаём ход оппоненту, увеличиваем Turn и делаем prepare_player_turn для следующего игрока.
 end_turn(GameState, NewGameState) :-
     GameState = game_state(P1, P2, CurrentPlayer, Turn),
     NextPlayer is 3 - CurrentPlayer,
@@ -223,11 +283,12 @@ prepare_player_turn(player(H, _M, MaxM, Deck, Hand, Board), _Turn, NewPlayer) :-
     NewMaxM is min(10, MaxM + 1),
     NewMana = NewMaxM,
     draw_card(Deck, Hand, NewDeck, NewHand),
-    % ставим CanAttack = true для всех миньонов на доске (снятие сумон-сикнесса)
     set_minions_ready(Board, ReadyBoard),
     NewPlayer = player(H, NewMana, NewMaxM, NewDeck, NewHand, ReadyBoard).
 
-% display helpers
+% -----------------------
+% ОТОБРАЖЕНИЕ
+% -----------------------
 display_game(game_state(P1, P2, Current, Turn)) :-
     format('Turn ~w, Current player: ~w~n', [Turn, Current]),
     display_player('Player 1', P1),
@@ -241,22 +302,24 @@ display_player(Name, player(H, M, MaxM, Deck, Hand, Board)) :-
     length(Deck, L), format('  Deck: ~w cards~n', [L]).
 
 display_board([]).
-display_board([minion(Name,Attack,Health,CanAttack)|T]) :-
-    format('    ~w (ATK:~w HP:~w CanAttack:~w)~n', [Name, Attack, Health, CanAttack]),
+display_board([minion(Name,Attack,Health,CanAttack,RushOnly)|T]) :-
+    format('    ~w (ATK:~w HP:~w CanAttack:~w RushOnly:~w)~n', [Name, Attack, Health, CanAttack, RushOnly]),
     display_board(T).
 
-% check_win_condition
+% -----------------------
+% ПРОВЕРКА ПОБЕДЫ
+% -----------------------
 check_win_condition(game_state(P1, P2, _, _), Winner) :-
     P1 = player(H1, _, _, _, _, _),
     P2 = player(H2, _, _, _, _, _),
     ( H1 =< 0 -> Winner = 2 ; H2 =< 0 -> Winner = 1 ; fail ).
 
-% process_command wrapper
+% process_command wrapper (удобство для game_loop)
 process_command(play(Minion), State, NewState) :- play_minion(State, Minion, NewState).
 process_command(attack(Attacker, Target), State, NewState) :- attack(State, Attacker, Target, NewState).
 process_command(end_turn, State, NewState) :- end_turn(State, NewState).
 
-% game loop (консольный)
+% game loop (консольный) — для ручного теста    
 game_loop(State) :-
     display_game(State),
     ( check_win_condition(State, Winner) ->
@@ -272,52 +335,58 @@ game_loop(State) :-
         )
     ).
 
-% Для запуска:
 start :- initial_state(State), game_loop(State).
 
 % -----------------------
 % ПРАВИЛА / ЛОГИЧЕСКИЕ ВЫВОДЫ
 % -----------------------
+
+% 1) strong_minion(Name) - сильный миньон (атк >=4 или HP >=5)
 strong_minion(Name) :-
-    ( card(Name, _, Attack, Health) -> true
-    ; card_attack(Name, Attack), card_health(Name, Health)
-    ),
+    ( card(Name, _, Attack, Health) -> true ; card_attack(Name, Attack), card_health(Name, Health) ),
     ( Attack >= 4 ; Health >= 5 ).
 
+% 2) has_ability(Name, Ability)
 has_ability(Name, Ability) :- ability_of(Name, Ability).
+
+% 3) is_taunt(Name)
 is_taunt(Name) :- ability_of(Name, taunt).
 
-% playable_card(PlayerAtom, CardName) - пример (использует in_hand/2 и player_mana/2)
-player_mana(player1, 3).
-player_mana(player2, 2).
+% 4) playable_card(PlayerAtom, CardName) - можно разыграть (использует in_hand/2 и player_mana/2)
+% Примерная модель: player_mana/2 даёт текущую доступную ману для "атома" игрока
+player_mana(player1, 1).
+player_mana(player2, 1).
 
 playable_card(PlayerAtom, CardName) :-
     in_hand(PlayerAtom, CardName),
-    ( card(CardName, Cost, _, _) -> true ; card_cost(CardName, Cost) ),
+    card_cost(CardName, Cost),
     player_mana(PlayerAtom, Mana),
     Mana >= Cost.
 
-can_attack_hero_after_play(Card) :-
-    has_ability(Card, charge).
-
+% 5) vulnerable_minion(Name) - миньон с HP <= 2
 vulnerable_minion(Name) :-
-    ( card(Name, _, _, H) -> true ; card_health(Name, H) ),
+    card_health(Name, H),
     H =< 2.
 
-% -----------------------
-% ПРИМЕРЫ ЗАПРОСОВ
-% -----------------------
-% ?- consult('lab1_hearthstone_charge_rush.pl').
-% ?- initial_state(S), display_game(S).
-% ?- initial_state(S), play_minion(S, stonetusk_boar, S2), display_game(S2).
-% ?- initial_state(S), play_minion(S, stonetusk_boar, S2), attack(S2, 1, 0, S3), display_game(S3).
-% (последний пример: stonetusk_boar имеет ability charge -> CanAttack = true -> можно атаковать героя сразу)
-%
-% Для rush:
-% добавь в руку карту с ability rush (например murloc_raider), сыграй и попытайся атаковать героя - должна быть ошибка
-% ?- initial_state(S), play_minion(S, murloc_raider, S2), attack(S2, 1, 0, S3). % этот вызов должен fail, потому что rush не может атаковать героя
-% ?- initial_state(S), play_minion(S, murloc_raider, S2), attack(S2, 1, 1, S3). % если у врага есть minion на позиции 1, допустимо
+% 6) can_attack_immediately(Name) - charge или rush
+can_attack_immediately(Name) :- has_ability(Name, charge).
+can_attack_immediately(Name) :- has_ability(Name, rush).
+
+% 7) total_board_attack(PlayerAtom, SumAttack) - сумма атак всех миньонов на доске игрока
+total_board_attack(PlayerAtom, Sum) :-
+    findall(Attack, (in_board(PlayerAtom, MinionName), card_attack(MinionName, Attack)), Attacks),
+    sum_list(Attacks, Sum).
+
+% 8) lethal_possible(PlayerAtom, OppHealth) - упрощённая проверка
+lethal_possible(PlayerAtom, OppHealth) :-
+    total_board_attack(PlayerAtom, SumAtk),
+    SumAtk >= OppHealth.
 
 % -----------------------
-% Конец файла
+% ДОПОЛНИТЕЛЬНЫЕ ПРЕДИКАТЫ
+% -----------------------
+card_of_tribe(Tribe, CardName) :- tribe_of(CardName, Tribe).
+
+% -----------------------
+% КОНЕЦ ФАЙЛА
 % -----------------------
