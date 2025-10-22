@@ -201,13 +201,9 @@ card_health(Name, Health) :- card(Name, _, _, Health).
 % Примечание: упрощённая симуляция для демонстрации логики.
 % -----------------------
 
-% play_minion(GameState, MinionName, NewGameState)
-% Если карта имеет charge -> CanAttack = true, RushOnly = false.
-% Если карта имеет rush -> CanAttack = true, RushOnly = true (в этом ходу нельзя бить героя).
-% Иначе CanAttack = false, RushOnly = false (summon sickness).
+% --- play_minion: для CurrentPlayer = 1
 play_minion(GameState, MinionName, NewGameState) :-
-    GameState = game_state(P1, P2, CurrentPlayer, Turn),
-    CurrentPlayer = 1,  % в этой версии действуем для CurrentPlayer = 1
+    GameState = game_state(P1, P2, 1, Turn),
     P1 = player(H1, M1, MaxM1, Deck1, Hand1, Board1),
     member(card(MinionName, Cost, Attack, Health), Hand1),
     Cost =< M1,
@@ -219,50 +215,77 @@ play_minion(GameState, MinionName, NewGameState) :-
     ),
     NewBoard1 = [minion(MinionName, Attack, Health, CanAttack, RushOnly)|Board1],
     NewP1 = player(H1, NewMana, MaxM1, Deck1, NewHand1, NewBoard1),
-    NewGameState = game_state(NewP1, P2, CurrentPlayer, Turn).
+    NewGameState = game_state(NewP1, P2, 1, Turn).
 
-% attack(GameState, AttackerIndex, TargetIndex, NewGameState)
+% --- play_minion: для CurrentPlayer = 2
+play_minion(GameState, MinionName, NewGameState) :-
+    GameState = game_state(P1, P2, 2, Turn),
+    P2 = player(H2, M2, MaxM2, Deck2, Hand2, Board2),
+    member(card(MinionName, Cost, Attack, Health), Hand2),
+    Cost =< M2,
+    NewMana is M2 - Cost,
+    remove_from_hand(Hand2, card(MinionName, Cost, Attack, Health), NewHand2),
+    ( ability_of(MinionName, charge) -> (CanAttack = true, RushOnly = false)
+    ; ability_of(MinionName, rush)   -> (CanAttack = true, RushOnly = true)
+    ; (CanAttack = false, RushOnly = false)
+    ),
+    NewBoard2 = [minion(MinionName, Attack, Health, CanAttack, RushOnly)|Board2],
+    NewP2 = player(H2, NewMana, MaxM2, Deck2, NewHand2, NewBoard2),
+    NewGameState = game_state(P1, NewP2, 2, Turn).
+
+% --- attack: для CurrentPlayer = 1
 % TargetIndex = 0 => атака в героя противника
 attack(GameState, AttackerIndex, TargetIndex, NewGameState) :-
-    GameState = game_state(P1, P2, CurrentPlayer, Turn),
-    CurrentPlayer = 1,
+    GameState = game_state(P1, P2, 1, Turn),
     P1 = player(H1, M1, MaxM1, Deck1, Hand1, Board1),
     P2 = player(H2, M2, MaxM2, Deck2, Hand2, Board2),
     nth1(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, AttackerCanAttack, AttackerRushOnly)),
-    % проверка, что может атаковать
-    ( AttackerCanAttack = true -> true
-    ;
-        % нельзя атаковать — завершаем как failure
-        fail
-    ),
-    % если у атакующего есть рывок (RushOnly=true), запрещаем атаку в героя
-    ( AttackerRushOnly = true, TargetIndex = 0 ->
-        % rush не может атаковать героя в этот ход
-        fail
-    ;
-        true
-    ),
+    ( AttackerCanAttack = true -> true ; fail ),
+    ( AttackerRushOnly = true, TargetIndex = 0 -> fail ; true ),
     ( TargetIndex = 0 ->
-        % Атака героя
         NewH2 is H2 - AttackerAttack,
-        % поставить флаг CanAttack = false и снять RushOnly для атакующего
         replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, AttackerHealth, false, false), TempBoard1),
         NewP2 = player(NewH2, M2, MaxM2, Deck2, Hand2, Board2),
         NewP1 = player(H1, M1, MaxM1, Deck1, Hand1, TempBoard1),
-        NewGameState = game_state(NewP1, NewP2, CurrentPlayer, Turn)
+        NewGameState = game_state(NewP1, NewP2, 1, Turn)
     ;
-        % Атака вражеского существа
         nth1(TargetIndex, Board2, minion(TargetName, TargetAttack, TargetHealth, TargetCanAttack, TargetRushOnly)),
         NewAttackerHealth is AttackerHealth - TargetAttack,
         NewTargetHealth is TargetHealth - AttackerAttack,
-        % обновляем доски (и делаем атакующему CanAttack=false, RushOnly=false)
         replace(AttackerIndex, Board1, minion(AttackerName, AttackerAttack, NewAttackerHealth, false, false), TempBoard1),
         replace(TargetIndex, Board2, minion(TargetName, TargetAttack, NewTargetHealth, TargetCanAttack, TargetRushOnly), TempBoard2),
         remove_dead_minions(TempBoard1, FinalBoard1),
         remove_dead_minions(TempBoard2, FinalBoard2),
         NewP1 = player(H1, M1, MaxM1, Deck1, Hand1, FinalBoard1),
         NewP2 = player(H2, M2, MaxM2, Deck2, Hand2, FinalBoard2),
-        NewGameState = game_state(NewP1, NewP2, CurrentPlayer, Turn)
+        NewGameState = game_state(NewP1, NewP2, 1, Turn)
+    ).
+
+% --- attack: для CurrentPlayer = 2
+attack(GameState, AttackerIndex, TargetIndex, NewGameState) :-
+    GameState = game_state(P1, P2, 2, Turn),
+    P1 = player(H1, M1, MaxM1, Deck1, Hand1, Board1),
+    P2 = player(H2, M2, MaxM2, Deck2, Hand2, Board2),
+    nth1(AttackerIndex, Board2, minion(AttackerName, AttackerAttack, AttackerHealth, AttackerCanAttack, AttackerRushOnly)),
+    ( AttackerCanAttack = true -> true ; fail ),
+    ( AttackerRushOnly = true, TargetIndex = 0 -> fail ; true ),
+    ( TargetIndex = 0 ->
+        NewH1 is H1 - AttackerAttack,
+        replace(AttackerIndex, Board2, minion(AttackerName, AttackerAttack, AttackerHealth, false, false), TempBoard2),
+        NewP1 = player(NewH1, M1, MaxM1, Deck1, Hand1, Board1),
+        NewP2 = player(H2, M2, MaxM2, Deck2, Hand2, TempBoard2),
+        NewGameState = game_state(NewP1, NewP2, 2, Turn)
+    ;
+        nth1(TargetIndex, Board1, minion(TargetName, TargetAttack, TargetHealth, TargetCanAttack, TargetRushOnly)),
+        NewAttackerHealth is AttackerHealth - TargetAttack,
+        NewTargetHealth is TargetHealth - AttackerAttack,
+        replace(AttackerIndex, Board2, minion(AttackerName, AttackerAttack, NewAttackerHealth, false, false), TempBoard2),
+        replace(TargetIndex, Board1, minion(TargetName, TargetAttack, NewTargetHealth, TargetCanAttack, TargetRushOnly), TempBoard1),
+        remove_dead_minions(TempBoard2, FinalBoard2),
+        remove_dead_minions(TempBoard1, FinalBoard1),
+        NewP2 = player(H2, M2, MaxM2, Deck2, Hand2, FinalBoard2),
+        NewP1 = player(H1, M1, MaxM1, Deck1, Hand1, FinalBoard1),
+        NewGameState = game_state(NewP1, NewP2, 2, Turn)
     ).
 
 % end_turn / prepare_player_turn
@@ -289,22 +312,78 @@ prepare_player_turn(player(H, _M, MaxM, Deck, Hand, Board), _Turn, NewPlayer) :-
 % -----------------------
 % ОТОБРАЖЕНИЕ
 % -----------------------
+% -----------------------
+% Plain console display (no ANSI)
+% -----------------------
+
+% clear_screen: try platform clear (cls/clear); if fails, print blank lines
+clear_screen :-
+    ( current_prolog_flag(windows, true) ->
+        ( catch(shell('cls'), _, fail) -> true ; forall(between(1,50,_), nl) )
+    ;
+        ( catch(shell('clear'), _, fail) -> true ; forall(between(1,50,_), nl) )
+    ).
+
+% Main plain display of game state: clears screen and prints info without ANSI
 display_game(game_state(P1, P2, Current, Turn)) :-
-    format('Turn ~w, Current player: ~w~n', [Turn, Current]),
-    display_player('Player 1', P1),
-    display_player('Player 2', P2).
+    clear_screen,
+    format('\n============ Hearthstone ============~n', []),
+    format('Turn: ~w    Current player: P~w~n~n', [Turn, Current]),
+    display_player_plain(1, P1, Current),
+    nl,
+    display_player_plain(2, P2, Current),
+    format('=====================================~n~n', []).
 
-display_player(Name, player(H, M, MaxM, Deck, Hand, Board)) :-
-    format('~s: Health=~w, Mana=~w/~w~n', [Name, H, M, MaxM]),
-    format('  Hand: ~w~n', [Hand]),
-    format('  Board:~n'),
-    display_board(Board),
-    length(Deck, L), format('  Deck: ~w cards~n', [L]).
+% display_player_plain(+PlayerNumber, +PlayerTerm, +CurrentPlayer)
+display_player_plain(Num, player(H, M, MaxM, Deck, Hand, Board), Current) :-
+    ( Num =:= Current ->
+        format('> Player ~w (CURRENT):~n', [Num])
+    ;
+        format('Player ~w:~n', [Num])
+    ),
+    format('  Health=~w  Mana=~w/~w~n', [H, M, MaxM]),
+    % Hand
+    length(Hand, HL),
+    format('  Hand (~w): ', [HL]),
+    display_hand_plain(Hand),
+    nl,
+    % Board
+    length(Board, BL),
+    format('  Board (~w):~n', [BL]),
+    ( BL =:= 0 -> format('    (empty)~n') ; display_board_plain(Board) ),
+    % Deck size
+    length(Deck, DL),
+    format('  Deck: ~w cards~n', [DL]).
 
-display_board([]).
-display_board([minion(Name,Attack,Health,CanAttack,RushOnly)|T]) :-
-    format('    ~w (ATK:~w HP:~w CanAttack:~w RushOnly:~w)~n', [Name, Attack, Health, CanAttack, RushOnly]),
-    display_board(T).
+% display_hand_plain(+HandList) - prints compact representation of cards in hand
+display_hand_plain([]) :- format('(none)').
+display_hand_plain([card(Name,Cost,Atk,Hp)]) :-
+    format('[~w C:~w A:~w H:~w]', [Name, Cost, Atk, Hp]).
+display_hand_plain([card(Name,Cost,Atk,Hp)|T]) :-
+    format('[~w C:~w A:~w H:~w] ', [Name, Cost, Atk, Hp]),
+    display_hand_plain(T).
+
+% display_board_plain(+BoardList) prints indexed minions
+display_board_plain(Board) :-
+    display_board_plain(Board, 1).
+
+display_board_plain([], _).
+display_board_plain([Min|T], Index) :-
+    display_minion_line_plain(Index, Min),
+    Next is Index + 1,
+    display_board_plain(T, Next).
+
+% display_minion_line_plain(+Index, +minion(Name,Attack,Health,CanAttack,RushOnly))
+display_minion_line_plain(Index, minion(Name,Atk,Hp,CanAttack,RushOnly)) :-
+    ( CanAttack = true -> Ready = '[Ready]' ; Ready = '[Sleep]' ),
+    ( RushOnly = true -> Rush = '[RushOnly]' ; Rush = '' ),
+    format('    ~w) ~w  (ATK:~w  HP:~w)  ~w ~w~n', [Index, Name, Atk, Hp, Ready, Rush]).
+
+% Fallback plain dump (keeps old behaviour if needed)
+display_game_plain(State) :-
+    write('Game state (plain):'), nl,
+    write(State), nl.
+
 
 % -----------------------
 % ПРОВЕРКА ПОБЕДЫ
@@ -319,7 +398,7 @@ process_command(play(Minion), State, NewState) :- play_minion(State, Minion, New
 process_command(attack(Attacker, Target), State, NewState) :- attack(State, Attacker, Target, NewState).
 process_command(end_turn, State, NewState) :- end_turn(State, NewState).
 
-% game loop (консольный) — для ручного теста    
+% game loop (консольный) 
 game_loop(State) :-
     display_game(State),
     ( check_win_condition(State, Winner) ->
@@ -382,11 +461,5 @@ lethal_possible(PlayerAtom, OppHealth) :-
     total_board_attack(PlayerAtom, SumAtk),
     SumAtk >= OppHealth.
 
-% -----------------------
-% ДОПОЛНИТЕЛЬНЫЕ ПРЕДИКАТЫ
-% -----------------------
-card_of_tribe(Tribe, CardName) :- tribe_of(CardName, Tribe).
 
-% -----------------------
-% КОНЕЦ ФАЙЛА
-% -----------------------
+card_of_tribe(Tribe, CardName) :- tribe_of(CardName, Tribe).
