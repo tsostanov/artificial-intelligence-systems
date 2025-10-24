@@ -3,6 +3,14 @@
 :- discontiguous in_deck/2.
 :- discontiguous in_board/2.
 
+% --- мягкая автозагрузка советчика (если есть 02/advisor.pl)
+:- initialization(load_advisor_safely).
+load_advisor_safely :-
+    (   current_module(advisor)
+    ->  true
+    ;   catch(use_module('02/advisor.pl'), _, true)
+    ).
+
 % -----------------------
 % ИНИЦИАЛЬНОЕ СОСТОЯНИЕ
 % Ход: CurrentPlayer = 1, Turn = 1
@@ -312,9 +320,7 @@ prepare_player_turn(player(H, _M, MaxM, Deck, Hand, Board), _Turn, NewPlayer) :-
 % -----------------------
 % ОТОБРАЖЕНИЕ
 % -----------------------
-% -----------------------
 % Plain console display (no ANSI)
-% -----------------------
 
 % clear_screen: try platform clear (cls/clear); if fails, print blank lines
 clear_screen :-
@@ -384,7 +390,6 @@ display_game_plain(State) :-
     write('Game state (plain):'), nl,
     write(State), nl.
 
-
 % -----------------------
 % ПРОВЕРКА ПОБЕДЫ
 % -----------------------
@@ -393,18 +398,53 @@ check_win_condition(game_state(P1, P2, _, _), Winner) :-
     P2 = player(H2, _, _, _, _, _),
     ( H1 =< 0 -> Winner = 2 ; H2 =< 0 -> Winner = 1 ; fail ).
 
+% -----------------------
+% ИНТЕГРАЦИЯ СОВЕТЧИКА
+% -----------------------
+
+% кто ходит
+current_player(game_state(_,_,CP,_), CP).
+
 % process_command wrapper (удобство для game_loop)
 process_command(play(Minion), State, NewState) :- play_minion(State, Minion, NewState).
 process_command(attack(Attacker, Target), State, NewState) :- attack(State, Attacker, Target, NewState).
 process_command(end_turn, State, NewState) :- end_turn(State, NewState).
 
-% game loop (консольный) 
+% новые команды советчика:
+process_command(advice, State, State) :-
+    ( current_module(advisor) ->
+        advisor:advise_now(State)
+    ;   writeln('Advisor is not loaded (02/advisor.pl).')
+    ).
+
+process_command(step, State, NewState) :-
+    current_module(advisor),
+    advisor:do_best_now(State, NewState).
+
+process_command(auto(N), State, NewState) :-
+    current_module(advisor),
+    integer(N), N >= 0,
+    advisor:auto(N, State, NewState).
+
+% доиграть текущий ход советчиком: печатает советы, пока ход не сменится
+process_command(auto_turn, State, EndState) :-
+    current_module(advisor),
+    current_player(State, CP),
+    advisor:advise_now(State),
+    advisor:do_best_now(State, S1),
+    ( current_player(S1, CP)
+    -> process_command(auto_turn, S1, EndState)
+    ;  EndState = S1
+    ).
+
+% game loop (консольный)
 game_loop(State) :-
     display_game(State),
     ( check_win_condition(State, Winner) ->
         format('Player ~w wins!~n', [Winner])
     ;
-        format('Enter command (play(Name), attack(AttIdx, TargetIdx), end_turn):~n'),
+        format('Enter command: play(Name), attack(AttIdx,TargetIdx), end_turn~n', []),
+        format('Advisor commands: advice | step | auto_turn | auto(N).~n|: ', []),
         read(Command),
         ( process_command(Command, State, NewState) ->
             game_loop(NewState)
@@ -460,6 +500,5 @@ total_board_attack(PlayerAtom, Sum) :-
 lethal_possible(PlayerAtom, OppHealth) :-
     total_board_attack(PlayerAtom, SumAtk),
     SumAtk >= OppHealth.
-
 
 card_of_tribe(Tribe, CardName) :- tribe_of(CardName, Tribe).
