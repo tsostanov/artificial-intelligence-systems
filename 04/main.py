@@ -66,6 +66,8 @@ X_train = X_norm[train_idx]
 y_train = y[train_idx]
 X_test = X_norm[test_idx]
 y_test = y[test_idx]
+X_train_original = X[train_idx]
+X_test_original = X[test_idx]
 
 def euclidean_distance(x, X):
     diff = X - x
@@ -106,6 +108,8 @@ rand_feat_idx = np.random.choice(all_feat_idx, size=4, replace=False)
 
 X_train_rand = X_train[:, rand_feat_idx]
 X_test_rand = X_test[:, rand_feat_idx]
+rand_feat_names = [X_df.columns[i] for i in rand_feat_idx]
+X_test_rand_original = X_test_original[:, rand_feat_idx]
 
 # модель 2: фиксированные признаки
 fixed_cols = ["Alcohol", "Malic Acid", "Color intensity", "Proline"]
@@ -113,14 +117,31 @@ fixed_idx = [X_df.columns.get_loc(c) for c in fixed_cols]
 
 X_train_fix = X_train[:, fixed_idx]
 X_test_fix = X_test[:, fixed_idx]
+fixed_feat_names = fixed_cols
+X_test_fix_original = X_test_original[:, fixed_idx]
 
 ks = [3, 5, 20]
 
-def inspect_neighbors(X_test_subset, X_train_subset, y_train_subset, sample_indices, ks_values, max_neighbors=20, label=""):
+def inspect_neighbors(
+    X_test_subset,
+    X_train_subset,
+    y_train_subset,
+    sample_indices,
+    ks_values,
+    max_neighbors=20,
+    label="",
+    true_labels=None,
+    feature_names=None,
+    original_test_subset=None,
+):
     title = "Анализ ближайших соседей"
     if label:
         title += f" ({label})"
     print(f"\n{title}:")
+
+    def to_python_counts(labels_arr, counts_arr):
+        return {int(l): int(c) for l, c in zip(labels_arr, counts_arr)}
+
     for idx in sample_indices:
         if idx >= len(X_test_subset):
             print(f"  Индекс {idx} вне диапазона тестовой выборки.")
@@ -130,17 +151,52 @@ def inspect_neighbors(X_test_subset, X_train_subset, y_train_subset, sample_indi
         order = np.argsort(dists)
         neighbor_labels = y_train_subset[order[:max_neighbors]]
         uniq, cnt = np.unique(neighbor_labels, return_counts=True)
+        true_label = int(true_labels[idx]) if true_labels is not None else None
         print(f"\nТестовый объект #{idx}")
-        print("Первые метки соседей:", neighbor_labels.tolist())
-        print("Распределение для k=20:", dict(zip(uniq.astype(int), cnt)))
+        if true_label is not None:
+            print(f"  Истинный класс: {true_label}")
+        if (
+            feature_names is not None
+            and original_test_subset is not None
+            and idx < len(original_test_subset)
+        ):
+            feature_values = {
+                feature_names[i]: float(original_test_subset[idx, i])
+                for i in range(len(feature_names))
+            }
+            print("  Значения признаков:", feature_values)
+        print("  Первые метки соседей:", neighbor_labels.astype(int).tolist())
+        print("  Распределение для k=20:", to_python_counts(uniq, cnt))
         for k in ks_values:
             top_k = neighbor_labels[:k]
             uniq_k, cnt_k = np.unique(top_k, return_counts=True)
-            print(f"  k={k}: {dict(zip(uniq_k.astype(int), cnt_k))}")
+            counts_dict = to_python_counts(uniq_k, cnt_k)
+            predicted_label = max(counts_dict.items(), key=lambda item: item[1])[0]
+            print(f"  k={k}: распределение {counts_dict}, прогноз -> {predicted_label}")
 
-# sample_indices = range(20)
-# inspect_neighbors(X_test_rand, X_train_rand, y_train, sample_indices, ks, label="модель 1 (случайные признаки)")
-# inspect_neighbors(X_test_fix, X_train_fix, y_train, sample_indices, ks, label="модель 2 (фиксированные признаки)")
+sample_indices = range(36)
+inspect_neighbors(
+    X_test_rand,
+    X_train_rand,
+    y_train,
+    sample_indices,
+    ks,
+    label="модель 1 (случайные признаки)",
+    true_labels=y_test,
+    feature_names=rand_feat_names,
+    original_test_subset=X_test_rand_original,
+)
+inspect_neighbors(
+    X_test_fix,
+    X_train_fix,
+    y_train,
+    sample_indices,
+    ks,
+    label="модель 2 (фиксированные признаки)",
+    true_labels=y_test,
+    feature_names=fixed_feat_names,
+    original_test_subset=X_test_fix_original,
+)
 
 print("\nМодель 1 (случайные признаки):")
 for k in ks:
