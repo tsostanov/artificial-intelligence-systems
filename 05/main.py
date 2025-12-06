@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 df = pd.read_csv("DATA (1).csv")
 
@@ -8,7 +9,7 @@ df["successful"] = (df["GRADE"] >= 4).astype(int)
 target_col = "successful"
 
 y = df[target_col].values
-X = df.drop(columns=["STUDENT ID", target_col])
+X = df.drop(columns=["STUDENT ID", "GRADE", target_col])
 
 for col in X.columns:
     X[col] = X[col].astype(str)
@@ -17,7 +18,7 @@ all_features = list(X.columns)
 n_features = len(all_features)
 k = int(math.sqrt(n_features))
 
-np.random.seed(42)
+np.random.seed(100)
 selected_features = list(np.random.choice(all_features, size=k, replace=False))
 
 print("Всего признаков:", n_features)
@@ -44,7 +45,7 @@ class TreeNode:
 def entropy(labels):
     if len(labels) == 0:
         return 0.0
-    _values, counts = np.unique(labels, return_counts=True)
+    _, counts = np.unique(labels, return_counts=True)
     probs = counts / len(labels)
     return -np.sum(probs * np.log2(probs))
 
@@ -91,6 +92,7 @@ class DecisionTreeC45:
 
     def _build_tree(self, X, y, features, depth):
         unique_classes = np.unique(y)
+
         if len(unique_classes) == 1:
             cls = unique_classes[0]
             proba = 1.0 if cls == 1 else 0.0
@@ -112,7 +114,7 @@ class DecisionTreeC45:
                 best_gr = gr
                 best_feature = feature
 
-        if best_feature is None:
+        if best_feature is None or best_gr <= 0:
             cls = majority_class(y)
             proba = np.mean(y)
             return TreeNode(is_leaf=True, prediction=cls, proba=proba)
@@ -181,7 +183,7 @@ class DecisionTreeC45:
         return np.array(probs)
 
 
-def train_test_split(X, y, test_size=0.3, random_state=42):
+def train_test_split_manual(X, y, test_size=0.3, random_state=42):
     np.random.seed(random_state)
     idx = np.arange(len(y))
     np.random.shuffle(idx)
@@ -192,9 +194,9 @@ def train_test_split(X, y, test_size=0.3, random_state=42):
             y[train_idx], y[test_idx])
 
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+X_train, X_test, y_train, y_test = train_test_split_manual(X, y, test_size=0.3, random_state=0)
 
-tree = DecisionTreeC45(max_depth=None, min_samples_split=2)
+tree = DecisionTreeC45(max_depth=8, min_samples_split=2)
 tree.fit(X_train, y_train)
 
 y_pred = tree.predict(X_test)
@@ -238,67 +240,55 @@ print(f"Recall:    {rec:.4f}")
 
 
 def roc_curve_manual(y_true, y_score):
-    order = np.argsort(-y_score)
-    y_true = y_true[order]
-    y_score = y_score[order]
+    thresholds = np.unique(y_score)[::-1]
 
-    P = np.sum(y_true == 1)
-    N = np.sum(y_true == 0)
+    tprs = []
+    fprs = []
 
-    TPR = [0.0]
-    FPR = [0.0]
-    TP = 0
-    FP = 0
-    prev_score = None
+    for thr in thresholds:
+        y_pred = (y_score >= thr).astype(int)
+        TP = np.sum((y_true == 1) & (y_pred == 1))
+        FP = np.sum((y_true == 0) & (y_pred == 1))
+        TN = np.sum((y_true == 0) & (y_pred == 0))
+        FN = np.sum((y_true == 1) & (y_pred == 0))
 
-    for i in range(len(y_true)):
-        if prev_score is None or y_score[i] != prev_score:
-            TPR.append(TP / P if P > 0 else 0.0)
-            FPR.append(FP / N if N > 0 else 0.0)
-            prev_score = y_score[i]
+        TPR = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+        FPR = FP / (FP + TN) if (FP + TN) > 0 else 0.0
 
-        if y_true[i] == 1:
-            TP += 1
-        else:
-            FP += 1
+        tprs.append(TPR)
+        fprs.append(FPR)
 
-    TPR.append(1.0)
-    FPR.append(1.0)
-
-    return np.array(FPR), np.array(TPR)
+    fprs = np.array([0.0] + fprs + [1.0])
+    tprs = np.array([0.0] + tprs + [1.0])
+    return fprs, tprs
 
 
 def precision_recall_curve_manual(y_true, y_score):
-    order = np.argsort(-y_score)
-    y_true = y_true[order]
-    y_score = y_score[order]
-
-    P = np.sum(y_true == 1)
-    TP = 0
-    FP = 0
+    thresholds = np.unique(y_score)[::-1]
 
     precisions = []
     recalls = []
-    prev_score = None
 
-    for i in range(len(y_true)):
-        if y_true[i] == 1:
-            TP += 1
-        else:
-            FP += 1
+    for thr in thresholds:
+        y_pred = (y_score >= thr).astype(int)
+        TP = np.sum((y_true == 1) & (y_pred == 1))
+        FP = np.sum((y_true == 0) & (y_pred == 1))
+        FN = np.sum((y_true == 1) & (y_pred == 0))
 
-        if prev_score is None or y_score[i] != prev_score:
-            prec = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-            rec = TP / P if P > 0 else 0.0
-            precisions.append(prec)
-            recalls.append(rec)
-            prev_score = y_score[i]
+        prec = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+        rec = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+
+        precisions.append(prec)
+        recalls.append(rec)
 
     return np.array(recalls), np.array(precisions)
 
 
 def auc_trapezoid(x, y):
     area = 0.0
+    order = np.argsort(x)
+    x = x[order]
+    y = y[order]
     for i in range(1, len(x)):
         width = x[i] - x[i - 1]
         height = (y[i] + y[i - 1]) / 2
@@ -317,3 +307,20 @@ auc_pr = auc_trapezoid(recalls_sorted, precisions_sorted)
 
 print(f"AUC-ROC: {auc_roc:.4f}")
 print(f"AUC-PR:  {auc_pr:.4f}")
+
+plt.figure()
+plt.plot(fpr, tpr, marker='.')
+plt.plot([0, 1], [0, 1], linestyle='--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate (Recall)")
+plt.title(f"ROC-кривая (AUC = {auc_roc:.3f})")
+plt.grid(True)
+plt.show()
+
+plt.figure()
+plt.plot(recalls_sorted, precisions_sorted, marker='.')
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title(f"PR-кривая (AUC = {auc_pr:.3f})")
+plt.grid(True)
+plt.show()
